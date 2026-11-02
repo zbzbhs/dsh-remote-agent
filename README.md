@@ -16,7 +16,7 @@
 ┌─────────────── 主电脑（hub）────────────────┐
 │  DSH · 模型 · 会话日志 · 全部凭证            │
 │  ┌─ dsh-remote-agent ─────────────────────┐ │
-│  │ 19 个 remote_* 工具 + Web 面板          │ │
+│  │ 24 个 remote_* 工具 + Web 面板          │ │
 │  └────────────────────────────────────────┘ │
 └──────────────────▲──────────────────────────┘
                    │ 节点主动拨入（direct / relay）
@@ -30,7 +30,7 @@
 
 | | |
 |---|---|
-| **状态** | 0.9.5 —— 主机 + 副机端到端可用；`exec` 与 `agent` 双链路均已在两台真机上验证通过；CI 覆盖 Windows / macOS / Linux |
+| **状态** | 0.10.0 —— 任务委派、真实自检、双向文件、桌面截图与后台管理；CI 覆盖 Windows / macOS / Linux |
 | **DSH** | 桌面版 / CLI，0.2.0-rc.2 验证 |
 | **平台** | Windows（全量验证）· Linux / macOS（CI 覆盖）|
 | **依赖** | **零外部 npm 依赖** —— 只用 `node:` 内置模块 |
@@ -248,15 +248,43 @@ node bin/dsh-remote-setup.js --doctor 你的配置.yml
   2. **拒绝杀本插件进程与其父进程** —— 否则副机失联，你会彻底失去远程修复能力
   3. **拒绝杀系统关键进程**（System / csrss / wininit / services / lsass 等）
 
-### 工具速查（共 19 个）
+### 十、真实环境自检与派单前门禁
+
+`remote_selfcheck` 不只检查“进程活着”：它会在每个工作区 root 里真实写入、读取并删除
+探针文件，检查 runner 与能力声明；GUI 用途还会实际截取一张图。返回结构化
+`checks[]`、`verdict`、`blockingFailures`，每项带具体修法。
+
+新版节点在 `remote_task` 和 subagent 派单前会默认重新自检；失败时任务不会进入队列。
+旧节点没有 `selfcheck` 能力时自动跳过，也可用 `precheck: false` 显式关闭本次检查。
+
+### 十一、后台代理管理与会话级开关
+
+- `remote_agents`：`list` 看任务，`status` 取单条视图，`wait` 等终态并返回 handoff；复用同一套任务真身，不另造状态源。
+- `remote_interrupt`：与 `remote_cancel` 同义，取消任务及在途拉取。
+- 可选 `sessionGate: true`：每个会话默认禁用 `remote_*` 和 `remote-agent` 子代理委派，用户输入 `/remote-agent on` 才开启，`off` 关闭，`status` 查询；`remote-use` 是命令别名。授权只存在内存中，重启即失效。默认 `false`，保持旧配置行为不变。
+
+### 十二、双向文件互传与桌面截图
+
+`remote_file` 统一提供 `stat` / `send` / `fetch`：
+
+- 单文件最大 **512MiB**，按 **256KiB** 分块；上传带 offset 重对齐、完整 SHA256 和原子 commit，下载先写 `.part`，校验通过才 rename。
+- 副机侧仍严格受 `roots` / `denyPaths` 约束，不跟随符号链接逃逸，默认不覆盖。
+- **上传到副机必须 `confirm: "yes"`**；下载到主机使用独占创建，已存在的目标不会被覆盖。
+
+`remote_screenshot` 在 Windows 副机捕获完整虚拟桌面，返回 PNG 元数据、保存路径与 SHA256；
+图片分块经既有 E2E 通道传输，临时截图有大小、数量和 TTL 上限。非 Windows 节点会明确报告不支持。
+
+### 工具速查（共 24 个）
 
 | 类别 | 工具 |
 |---|---|
 | **节点** | `remote_nodes`（列表 + 负载 + 队列 + 模型清单）|
-| **任务** | `remote_task`（派发）· `remote_status`（查进度）· `remote_cancel`（取消）|
+| **任务** | `remote_task`（派发，支持 fresh gate）· `remote_status`（查进度）· `remote_cancel` / `remote_interrupt`（取消）|
+| **后台管理** | `remote_agents`（list / status / wait）· `remote_selfcheck`（真实环境自检）|
 | **审批** | `remote_task` 的 `approval: 'manual'` 会挂起 → 面板或工具批准/拒绝 |
 | **结果** | `remote_handoff`（结果卡）· `remote_manifest`（产物清单）· `remote_pull`（拉成品）· `remote_purge`（清理）|
 | **文件（只读）** | `remote_ls` · `remote_read` · `remote_grep` · `remote_tree` |
+| **双向文件与桌面** | `remote_file`（stat / send / fetch）· `remote_screenshot`（Windows）|
 | **文件（写入）** | `remote_write` · `remote_mkdir` · `remote_move` · `remote_delete` —— **必须传 `confirm: "yes"`**；默认不覆盖、不递归删 |
 | **诊断** | `remote_ps`（列进程）· `remote_port`（查端口占用）· `remote_kill`（杀进程，**不可逆**，须 `confirm: "yes"`）|
 
@@ -561,6 +589,32 @@ remote_kill { pid, confirm: "yes" }           // 杀进程（不可逆）
 ---
 
 
+### 自检、后台等待、文件互传与截图
+
+```jsonc
+// remote_selfcheck：真实检查副机；GUI 用途会额外检查交互桌面
+{ "node": "newland", "purpose": "agent" }
+
+// remote_agents：等待既有任务，返回同一任务的 handoff
+{ "action": "wait", "taskId": "task_xxx", "timeoutMs": 60000 }
+
+// remote_file：主机 → 副机（必须确认）
+{ "action": "send", "node": "newland", "localPath": "D:\\assets\\brief.pdf", "remotePath": "D:\\work\\brief.pdf", "confirm": "yes" }
+
+// remote_file：副机 → 主机（目标已存在会拒绝）
+{ "action": "fetch", "node": "newland", "remotePath": "D:\\work\\report.pdf", "localPath": "D:\\downloads\\report.pdf" }
+
+// remote_screenshot
+{ "node": "newland" }
+```
+
+会话级开关是可选配置，放在主机 `remote-agent` 的 `config` 中：
+
+```yaml
+sessionGate: true
+# 之后在具体会话输入 /remote-agent on 或 /remote-agent off
+```
+
 ### 想用本地 IDE 打开副机的文件？（SMB 共享）
 
 面板上有「工作区共享（SMB）」区：把副机的工作区共享出去，主机
@@ -587,12 +641,13 @@ remote_kill { pid, confirm: "yes" }           // 杀进程（不可逆）
 6. **SMB 共享会绕过上面全部边界** —— 开启后 `roots` / `denyPaths` 全部失效
    （Windows 内核直读，插件拦不住）。默认只读，且需要二次确认。
 
-### 本插件主动放宽边界的三处（都在这里，别处没有）
+### 本插件主动放宽边界的四处（都在这里，别处没有）
 
 | 能力 | 放宽了什么 | 补偿措施 |
 |---|---|---|
 | **写操作**（4 个工具）| 从"只读"到"可改文件" | `confirm` 必填 · 默认不覆盖 · 不递归删 · 原子写 · 8MB 上限 · roots + 父目录校验 |
 | **进程诊断**（`remote_kill`）| 从"只读"到"可结束进程" | `confirm` 必填 · 拒杀自身/父进程/系统进程 |
+| **双向文件与截图** | 可传 512MiB 文件、可读取桌面图像 | roots/denyPaths · 上传 confirm · 完整 hash · 原子落盘 · 截图 TTL/数量/大小上限 |
 | **SMB 共享** | `roots` / `denyPaths` **完全失效** | 默认只读 · 二次确认 · 明确文档说明风险 |
 
 除此之外，插件不做任何越界的事。
@@ -604,7 +659,7 @@ remote_kill { pid, confirm: "yes" }           // 杀进程（不可逆）
 | 路径 | 作用 |
 |---|---|
 | `lib/index.js` | 插件入口（角色分发器：`role: auto` / `hub` / `worker` / `both`） |
-| `lib/hub/**` | 主机侧：节点注册表、**19 个工具**、subagent provider、UI 路由、环境体检 |
+| `lib/hub/**` | 主机侧：节点注册表、**24 个工具**、subagent provider、UI 路由、环境体检 |
 | `lib/hub/views.js` | **投影共享层** —— 工具与 UI 用同一份字段白名单 |
 | `lib/node/**` | 副机侧：拨入、任务引擎、产物服务、exec/agent 双后端、SMB 共享、文件读写、进程诊断 |
 | `lib/env-check.js` | 环境体检（命令行与面板共用一份逻辑） |

@@ -396,7 +396,10 @@ test('buildNodeHello：形状正确且能过 validateHello', (t) => {
   assert.ok(Array.isArray(hello.shells) && hello.shells.length > 0)
   assert.ok(Array.isArray(hello.roots))
   assert.ok(Array.isArray(hello.caps))
-  assert.deepEqual(hello.caps, ['fs', 'exec', 'artifact', 'agent'])
+  assert.deepEqual(hello.caps, [
+    'fs', 'exec', 'artifact', 'agent', 'file-transfer', 'selfcheck',
+    ...(process.platform === 'win32' ? ['desktop', 'gui'] : []),
+  ])
 
   const v = validateHello(hello)
   assert.equal(v.ok, true, `hello 未通过协议校验：${v.error}`)

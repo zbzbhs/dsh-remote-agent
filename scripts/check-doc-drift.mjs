@@ -168,9 +168,25 @@ check('14b', 'UI 路径调用 handoffView',
   'ui-routes.js 调用点')
 // 关键回归：工具路径也必须走投影。
 // 工具返回值会进入会话日志，被后续每个请求带上 —— 比 UI 那条路径更该加固。
-check('14c', '工具路径（remote_handoff）调用 handoffView，不裸直出',
-  /handoff:\s*handoffView\(/.test(hubTools) && !/handoff:\s*t\.handoff\s*[,}]/.test(stripComments(hubTools)),
-  'lib/hub/tools.js')
+// 逐个站点检查，而不是「文件里出现过一次 handoffView」——
+// 0.10.0 新增 remote_agents 后 tools.js 有两处 handoff 出口，
+// 「存在即通过」会让注入回裸直出的自检静默失效（doc-drift-selfcheck 实测抓到）。
+//
+// 这里不能复用 stripComments：它按 /\/\*[\s\S]*?\*\// 一刀切，
+// 而 tools.js 的注释里就有 `/* */` 字面量，会把大段真代码一起吃掉，
+// 于是被注入的裸直出落进被吃掉的区域 → 永远看不见。
+// 改为逐行剔除注释行（`//`、`*`、`/*` 开头），保留所有代码行。
+const hubToolsCode = hubTools
+  .split('\n')
+  .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+  .join('\n')
+const handoffSites = [...hubToolsCode.matchAll(/handoff:\s*([^,\n}]*)/g)]
+  .map((m) => m[1].trim())
+  // 只挑返回值站点；`handoff: { type: 'object' }` 这类工具 schema 声明不是出口。
+  .filter((site) => site !== '' && !site.startsWith('{'))
+check('14c', '工具路径（remote_handoff / remote_agents）每个 handoff 出口都走 handoffView',
+  handoffSites.length > 0 && handoffSites.every((site) => site.startsWith('handoffView(')),
+  `lib/hub/tools.js 的 ${handoffSites.length} 处 handoff 出口`)
 // 同理：registry.taskView（remote_status 用它）必须走共享投影，
 // 不能逐字段裸拷贝副机上报的 exit/changed/summary/error。
 check('14d', 'registry.taskView 走共享投影（remote_status 不裸拷贝）',
@@ -1066,6 +1082,7 @@ check('65', 'eslint 严格档：lint script + 配置文件 + CI job 三件套齐
  */
 {
   const toolsSrc = read('lib/hub/tools.js')
+  const advancedToolsSrc = read('lib/hub/advanced-tools.js')
   const rootReadme2 = read('README.md')
 
   // 数实际注册：三种注册入口都要算进来（2026-10-20 加了 writeOp 与进程工具）
@@ -1075,7 +1092,8 @@ check('65', 'eslint 严格档：lint script + 配置文件 + CI job 三件套齐
   const regCount = (toolsSrc.match(/^\s{2}reg\(/gm) || []).length
   const fsOpCount = (toolsSrc.match(/^\s{2}fsOp\(/gm) || []).length
   const writeOpCount = (toolsSrc.match(/^\s{2}writeOp\(/gm) || []).length
-  const actual = regCount + fsOpCount + writeOpCount
+  const advancedCount = (advancedToolsSrc.match(/^\s{2}reg\(/gm) || []).length
+  const actual = regCount + fsOpCount + writeOpCount + advancedCount
 
   // 从 README 里抽声明（形如「12 个 remote_* 工具」或「工具速查（共 12 个）」）
   const m = /(?:共\s*(\d+)\s*个|(\d+)\s*个\s*remote_\*)/.exec(rootReadme2)
@@ -1083,7 +1101,7 @@ check('65', 'eslint 严格档：lint script + 配置文件 + CI job 三件套齐
 
   check('83', 'README 声明的工具数量等于代码里实际注册的数量',
     declared !== null && declared === actual,
-    `lib/hub/tools.js（实际 ${actual} 个：reg=${regCount} + fsOp=${fsOpCount} + writeOp=${writeOpCount}）`
+    `lib/hub（实际 ${actual} 个：reg=${regCount} + fsOp=${fsOpCount} + writeOp=${writeOpCount} + advanced=${advancedCount}）`
     + ` vs README.md（声明 ${declared === null ? '未找到' : declared} 个）`)
 }
 
@@ -1367,6 +1385,50 @@ check('65', 'eslint 严格档：lint script + 配置文件 + CI job 三件套齐
     missing.length === 0
       ? 'README.md（七/八/九 三节 + 安全边界 + 设计理由）'
       : `README.md 缺少小节：${missing.join('、')}`)
+}
+
+/* ── 97~98. 0.10.0 全面升级：实现接线与公开文档必须同步 ── */
+{
+  const hubIdx = read('lib/hub/index.js')
+  const hubToolsSrc = read('lib/hub/tools.js')
+  const advancedSrc = read('lib/hub/advanced-tools.js')
+  const workerSrc = read('lib/node/index.js')
+  const fileSvc = read('lib/node/file-transfer-service.js')
+  const desktopSvc = read('lib/node/desktop-service.js')
+  const selfcheckSvc = read('lib/node/selfcheck-service.js')
+  const sessionGateSrc = read('lib/hub/session-gate.js')
+  const rootReadme4 = read('README.md')
+  const securityDoc = read('SECURITY.md')
+
+  check('97', '0.10.0 新能力完整接线：fresh gate + 文件 + 截图 + 后台 + 会话门禁',
+    /registerAdvancedTools\(/.test(hubIdx)
+    && /precheck/.test(hubToolsSrc)
+    && /remote_selfcheck/.test(hubToolsSrc)
+    && /remote_agents/.test(hubToolsSrc)
+    && /remote_interrupt/.test(hubToolsSrc)
+    && /name: 'remote_file'/.test(advancedSrc)
+    && /name: 'remote_screenshot'/.test(advancedSrc)
+    && /fileBegin:/.test(workerSrc)
+    && /desktopCapture:/.test(workerSrc)
+    && /selfcheck:/.test(workerSrc)
+    && /createFileTransferService/.test(fileSvc)
+    && /createDesktopService/.test(desktopSvc)
+    && /createSelfCheckService/.test(selfcheckSvc)
+    && /createSessionGate/.test(sessionGateSrc),
+    'hub/index.js + tools.js + advanced-tools.js + node 三个服务 + session-gate.js')
+
+  check('98', '0.10.0 文档说明新能力、限制与安全边界',
+    /真实环境自检与派单前门禁/.test(rootReadme4)
+    && /后台代理管理与会话级开关/.test(rootReadme4)
+    && /双向文件互传与桌面截图/.test(rootReadme4)
+    && /512MiB/.test(rootReadme4)
+    && /256KiB/.test(rootReadme4)
+    && /remote_file/.test(securityDoc)
+    && /remote_screenshot/.test(securityDoc)
+    && /sessionGate/.test(securityDoc)
+    && /SHA256/.test(securityDoc)
+    && /没有另开 Bearer HTTP/.test(securityDoc),
+    'README.md 十/十一/十二节 + SECURITY.md 0.10.0 安全专节')
 }
 
 /* ── 输出 ── */

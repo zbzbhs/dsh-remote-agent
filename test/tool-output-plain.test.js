@@ -138,7 +138,7 @@ test('收口：reg() 必须给每个工具包上净化层', () => {
   assert.match(regBody, /toPlainJson\(/, 'reg 必须把 execute 的返回值过一遍 toPlainJson')
 })
 
-test('收口：toPlainJson 必须覆盖全部 19 个工具（经 reg 注册）', () => {
+test('收口：toPlainJson 必须覆盖 tools.js 全部 22 个工具（经 reg 注册）', () => {
   const src = fs.readFileSync(TOOLS, 'utf8')
   // 工具名以三种形态出现，全部要数进来（否则新增工具时这条断言会静默漏掉）：
   //   1. 8 个任务工具：`reg({ name: 'remote_x', ... })` —— 出现 `name: '...'`
@@ -147,21 +147,22 @@ test('收口：toPlainJson 必须覆盖全部 19 个工具（经 reg 注册）',
   const direct = [...src.matchAll(/name: '(remote_[a-z_]+)'/g)].map((m) => m[1])
   const viaHelper = [...src.matchAll(/\n {4}'(remote_[a-z_]+)',\n/g)].map((m) => m[1])
   const names = [...direct, ...viaHelper]
-  assert.equal(names.length, 19, `应有 19 个工具，实际 ${names.length}: ${names.join(', ')}`)
-  // 直接 reg({...}) 的：8 个任务工具 + 3 个进程诊断工具 = 11 个
-  // （fsOp / writeOp 内部那处 reg({ 缩进 4 空格，不在此列）
+  assert.equal(names.length, 22, `应有 22 个工具，实际 ${names.length}: ${names.join(', ')}`)
+  // 直接 reg：原 11 + selfcheck/agents/interrupt = 14；高级文件/截图工具在 advanced-tools.js 单独收口。
   const regCalls = (src.match(/\n {2}reg\(\{/g) || []).length
-  assert.equal(regCalls, 11, `应有 11 处直接 reg({...}) 调用（8 任务 + 3 进程），实际 ${regCalls}`)
+  assert.equal(regCalls, 14, `应有 14 处直接 reg({...}) 调用，实际 ${regCalls}`)
   assert.match(src, /const fsOp = /, '只读文件工具应经 fsOp 包装注册（统一 fsRequest 错误转译）')
   assert.match(src, /const writeOp = /, '写操作工具应经 writeOp 包装注册（强制 confirm 二次确认）')
   // 锁住工具集合本身：新增/删除工具时这条会提醒你同步文档与断言
   assert.deepEqual(
     names.slice().sort(),
     [
+      'remote_agents',
       'remote_cancel',
       'remote_delete',
       'remote_grep',
       'remote_handoff',
+      'remote_interrupt',
       'remote_kill',
       'remote_ls',
       'remote_manifest',
@@ -173,6 +174,7 @@ test('收口：toPlainJson 必须覆盖全部 19 个工具（经 reg 注册）',
       'remote_pull',
       'remote_purge',
       'remote_read',
+      'remote_selfcheck',
       'remote_status',
       'remote_task',
       'remote_tree',

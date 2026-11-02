@@ -18,7 +18,7 @@ explicitly pull them.
 ┌──────────── main machine (hub) ────────────┐
 │  DSH · model · session logs · all credentials │
 │  ┌─ dsh-remote-agent ─────────────────────┐ │
-│  │ 12 remote_* tools + Web panel           │ │
+│  │ 24 remote_* tools + Web panel           │ │
 │  └────────────────────────────────────────┘ │
 └──────────────────▲──────────────────────────┘
                    │ node dials in (direct / relay)
@@ -162,6 +162,31 @@ with a long task, these answer instantly:
 Safety: paths must be inside the node's `roots`, `denyPaths` applies, symlinks are
 listed but never dereferenced.
 
+### Real self-checks, background agents and session opt-in
+
+`remote_selfcheck` performs real write/read/delete probes in every workspace root,
+checks runner capabilities, and actually captures the desktop for `purpose: "gui"`.
+It returns structured `checks[]`, `verdict`, `blockingFailures`, and concrete fixes.
+New workers are checked again immediately before `remote_task` / subagent dispatch;
+a blocked check never enters the queue. Use `precheck: false` to skip explicitly.
+
+`remote_agents` lists tasks, reads one task, or waits for its terminal handoff;
+`remote_interrupt` cancels the same task (and in-flight pulls). Optional
+`sessionGate: true` makes each chat opt in with `/remote-agent on` before any
+`remote_*` tool or `remote-agent` subagent delegation can run; `off` revokes it and `status` reports it. Authorization is
+session-scoped, in memory, and fail-closed when no session id is available.
+
+### Large two-way files and desktop screenshots
+
+`remote_file` combines `stat`, `send`, and `fetch`. Files up to **512MiB** move in
+**256KiB** chunks with offset reconciliation, full SHA256 verification, `.part`
+files and atomic commit. Worker paths remain confined by `roots` / `denyPaths`;
+uploads require `confirm: "yes"`, and downloads never overwrite a local file.
+
+`remote_screenshot` captures the full virtual desktop on Windows workers and
+returns PNG metadata, a hub-side path and SHA256. Bytes travel over the existing
+E2E channel; temporary screenshots have size/count/TTL limits.
+
 ### 4. Open the worker's files in your local IDE (SMB share)
 
 The panel's *Workspace sharing* section publishes a worker directory over SMB; the
@@ -194,15 +219,17 @@ hub maps it with `net use X: \\worker\dsh-work-...` and you can open it in local
 | **Credentials never leave the worker** | The protocol carries no model keys; the worker runs its own loop with its own model config |
 | **Zero npm dependencies** | `node:` built-ins only, no build step, `lib/` is the artifact |
 
-### Tool reference (12 tools)
+### Tool reference (24 tools)
 
 | Category | Tools |
 |---|---|
 | **Nodes** | `remote_nodes` (list + load + queue + model list) |
-| **Tasks** | `remote_task` (dispatch) · `remote_status` (progress) · `remote_cancel` (abort) |
+| **Tasks** | `remote_task` (dispatch + fresh gate) · `remote_status` (progress) · `remote_cancel` / `remote_interrupt` (abort) |
+| **Background / health** | `remote_agents` (list / status / wait) · `remote_selfcheck` (real worker probes) |
 | **Approval** | `approval: 'manual'` holds the task → approve/reject from the panel or tools |
 | **Results** | `remote_handoff` (result card) · `remote_manifest` (artifact list) · `remote_pull` (fetch finals) · `remote_purge` (cleanup) |
-| **Files** | `remote_ls` · `remote_read` · `remote_grep` · `remote_tree` |
+| **Read-only files** | `remote_ls` · `remote_read` · `remote_grep` · `remote_tree` |
+| **Large files / desktop** | `remote_file` (stat / send / fetch) · `remote_screenshot` (Windows) |
 
 ---
 
@@ -383,6 +410,7 @@ changes, change diffs, final artifacts, log tail.
 | `repo` | Route by repository: pass a repo name, remote-URL fragment, or local path fragment — the task goes to a node that holds that repo (load-aware when several do). When `workspace` is omitted, the repo's local path is used automatically. Workers scan git repos under their `roots` after connecting (zero subprocess, credentials stripped locally, refreshed every 10 minutes) |
 | `approval` | Two-phase approval: `manual` = hub holds the task until approved in the panel (auto-rejected on timeout, fail-closed); `auto` = dispatch immediately. Defaults: **exec → manual, agent → auto** |
 | `dryRun` | Preview only: returns which node/workspace/mode would be used, computed by the exact same routing + validation as a real dispatch |
+| `precheck` | Refresh the worker self-check immediately before dispatch. Defaults on for nodes advertising `selfcheck`; set `false` to skip explicitly |
 | `workspace` | Absolute path on the worker, must be inside the node's `roots`. Defaults when omitted |
 | `mode` | `agent` (worker starts an independent agent session, default) / `exec` (run a command directly) |
 | `model` | Optional. Model the worker should use (`mode=agent` only): `{model:"deepseek-chat"}` or `{provider:"openai",model:"gpt-4o"}`. Selection only, no credentials. **Not supported on headless backends** (rejected before dispatch; the worker then uses its default model). `dryRun` echoes the resolved model and its source; the worker's default model is shown by `remote_nodes` |
@@ -452,7 +480,7 @@ computer.** Read **[SECURITY.md](SECURITY.md)** before deploying — especially:
 | Path | Purpose |
 |---|---|
 | `lib/index.js` | Plugin entry (role dispatcher: `role: hub` / `worker` / `both`) |
-| `lib/hub/**` | Hub side: node registry, **12 tools**, subagent provider, UI routes, environment health-check |
+| `lib/hub/**` | Hub side: node registry, **24 tools**, subagent provider, UI routes, environment health-check |
 | `lib/hub/views.js` | **Shared projection layer** —— tools and the UI use the same field whitelist |
 | `lib/node/**` | Worker side: dial-in, task engine, artifact service, exec/agent backends |
 | `lib/client.js` | Browser half (Web panel) |

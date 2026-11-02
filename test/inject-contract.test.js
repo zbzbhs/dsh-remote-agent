@@ -176,8 +176,8 @@ test('回归：applyHub 在缺 tools 的 inject 下**不再抛错**（容错生�
   assert.equal(ctxA.registered.tools.length, 0, '缺 tools 时应没有工具')
   assert.ok(ctxA.registered.routes.length > 0, '缺 tools 时路由仍应注册')
 
-  // 齐全：应该有 19 个工具（8 任务 + 4 只读文件 + 4 写操作 + 3 进程诊断，2026-10-20）
+  // 齐全：24 个工具（原 19 + 自检/后台管理/中断 + 文件互传 + 截图）
   const ctxB = makeCtx(['webServer', 'tools', 'systemPrompt'])
   applyHub(ctxB, { role: 'hub', nodeToken: 'nt_x' })
-  assert.equal(ctxB.registered.tools.length, 19, 'inject 齐全时应有 19 个工具（8 任务 + 4 只读 + 4 写操作 + 3 进程诊断）')
+  assert.equal(ctxB.registered.tools.length, 24, 'inject 齐全时应有 24 个工具')
 })

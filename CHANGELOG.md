@@ -9,6 +9,50 @@
 
 ---
 
+## [0.10.0] - 2026-11-02
+
+### 全面能力升级：自检、双向文件、桌面截图、后台管理
+
+参考 `@hope_phenom/dsh-plugin-remote-use` 的机制重新梳理了远程能力，但保留本项目的
+核心架构：direct + relay、X25519/AES-GCM E2E、worker 是任务状态权威、断连续跑、
+manifest-before-bytes、只有显式请求才传成品。**没有把 ACP 明文任务流或每次连接
+新建 DSH 子进程带进现有链路。**
+
+#### 新增
+
+- **真实自检与派单前 fresh gate**：`remote_selfcheck` 返回结构化 `checks[]` /
+  `verdict` / `blockingFailures`；真实写读删每个 root，GUI 用途实际截图。
+  新节点在 `remote_task` / subagent 创建任务前默认重新检查，失败即不派单；
+  `precheck: false` 可显式跳过。
+- **后台管理**：`remote_agents` 提供 `list` / `status` / `wait`，直接复用同一任务
+  注册表和 handoff；`remote_interrupt` 是取消语义别名。
+- **双向大文件**：`remote_file` 提供 `stat` / `send` / `fetch`，单文件 512MiB、
+  256KiB 分块、offset 重对齐、完整 SHA256、`.part` 与原子 commit。worker 仍受
+  roots/denyPaths/realpath 约束；上传必须 `confirm: "yes"`，下载默认不覆盖。
+- **桌面截图**：`remote_screenshot` 在 Windows worker 捕获完整虚拟桌面，PNG 字节
+  经既有 E2E 通道分块返回；有大小、数量、TTL 上限，校验后才原子落盘。
+- **可选会话门禁**：`sessionGate: true` 时，每个会话须由用户执行
+  `/remote-agent on`（别名 `/remote-use on`）才能调用 `remote_*`；`off` 撤销，
+  `status` 查询。按 session id 隔离、内存保存、重启失效、缺 session fail closed。
+  默认 `false`，旧配置行为不变。
+
+#### 安全与边界
+
+- 新文件和截图能力复用既有 FS RPC，不增加旁路 HTTP，不向 relay 暴露明文。
+- 自检的 GUI 项只约束 GUI 用途，不阻塞 headless `agent` / `exec`。
+- 高级工具在 execute 入口再次检查 session gate；即使 Host 没有全局 guard 也不会绕过。
+- 文件 hash 或长度不一致时不 promote；截图读取后主动 release，并有定期清理。
+
+#### 测试
+
+```
+tests       1086（1083 pass / 0 fail / 3 skip）
+新增        advanced-tools 10、precheck-gate 3、file-transfer-service 17、
+            selfcheck-service 6、desktop-service 4、session-gate 5
+契约更新    24 工具、worker caps、subagent mock 兼容、工具输出净化
+漂移检查    134/134（14c 改为逐站点校验：每个 handoff 出口都必须走投影）
+```
+
 ## [0.9.11] - 2026-10-21
 
 ### 🔴 修复：agent 任务"假成功"（真实使用中发现的严重 bug）

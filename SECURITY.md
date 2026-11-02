@@ -202,13 +202,13 @@ docs/verification-repos-routing-real.md §4③）。超长值 400 字符截断�
 协议里**不带模型 API key**。副机用自己的 DSH 配置与凭证 ——
 主机只能派任务，拿不到副机的模型凭证。
 
-### 远程文件工具：只读、roots 边界、链接不跟随（提案 #25）
+### 远程只读文件工具：roots 边界、链接不跟随（提案 #25）
 
 四个文件工具（`remote_ls` / `remote_read` / `remote_grep` / `remote_tree`）
 让 AI 直接读副机文件 —— 它们的安全模型：
 
-- **只读**。`lib/node/fs-service.js` 整个模块没有任何写动词；二进制文件
-  只回 sha256 + 大小 + 64 字节头部预览，不回原始字节。
+- **这一组只有读动词**。写操作由独立工具承担，见后文；二进制文件在
+  `remote_read` 中只回 sha256 + 大小 + 64 字节头部预览，不回原始字节。
 - **`roots` 是同一条边界**。每个入口路径先 `realpathSync.native`（展开
   8.3 短名与符号链接，与任务工作区解析同口径）再与 `roots` 前缀比对，
   越界即 `workspace-denied`；`denyPaths` 在**枚举层**就生效 —— 被禁
@@ -225,6 +225,25 @@ docs/verification-repos-routing-real.md §4③）。超长值 400 字符截断�
 `roots` 就意味着主机 AI 可以读那些内容（与派任务让副机 agent 读文件
 的既有能力等价，只是更快更直接）。不想让 AI 读某目录，把它加进
 `denyPaths`。
+
+### 双向文件、桌面截图与会话门禁（0.10.0）
+
+- `remote_file` 的 worker 路径和现有读写工具使用同一 `roots` / `denyPaths` /
+  realpath 边界；上传必须显式 `confirm: "yes"`，默认不覆盖。单文件 512MiB、
+  256KiB 分块，offset 冲突返回 `expectedOffset`，commit 校验完整 SHA256，
+  先写临时文件再原子 rename。hub 下载同样先写 `.part`，目标用独占创建。
+- 文件和 PNG 字节只走现有 `fs/req` ↔ `fs/res` E2E 通道，**没有另开 Bearer HTTP
+  旁路**。relay 仍只见路由信封和密文。
+- `remote_screenshot` 会把副机完整虚拟桌面的图像带回主机；这是明确的敏感读取
+  能力，应只派给可信会话。worker 限制单图 16MiB、最多 16 张、10 分钟 TTL，
+  正常读取后立即释放。
+- `remote_selfcheck` 的写入探针只发生在已配置 roots 内，并立即删除；GUI 检查
+  会临时截图，但不会把探针图回传。fresh gate 失败时任务在 hub 创建前终止。
+- 可选 `sessionGate: true` 按 Host 的 session id 授权，未识别会话 fail closed；
+  工具 execute 内有兜底 guard，不能只靠隐藏工具或提示词。授权不持久化。
+- 这些能力没有放宽成品策略：任务完成仍只自动回 handoff + manifest，
+  `remote_pull` 仍只接受 `role:final`。`remote_file fetch` 是用户/Agent 显式
+  读取 roots 内文件的独立通道，不会自动搬运工作区。
 
 ### exec 两阶段审批：默认挂起，等不到人不跑（提案 #2）
 

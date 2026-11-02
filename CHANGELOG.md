@@ -9,6 +9,69 @@
 
 ---
 
+## [0.10.1] - 2026-11-02
+
+### 🔴 修复：0.10.0 装进 profile 后整个插件不激活
+
+**这是发布后立刻暴露的阻断级事故。**
+
+现场（2026-11-02，主机 profile 升到 0.10.0 后）：
+
+```
+GET /dsh-market/status
+{"active": false, "error": "dsh: warning: 1 entry did not activate\n
+ remote-agent (dsh-remote-agent): TypeError: tool \"remote_write\" must declare
+ output { schema, render, presentationMeta? }"}
+```
+
+24 个工具全部消失、面板全空 —— 但**本地测试 1086 条全绿**。
+
+#### 根因
+
+DSH 的 `ctx.tools.register()` 是**注册期硬校验**（`dsh-tools/lib/index.js:2977`）：
+
+```js
+if (output === void 0 || typeof output !== 'object'
+    || typeof output.render !== 'function'
+    || output.presentationMeta !== void 0 && typeof output.presentationMeta !== 'function')
+  throw new TypeError(`tool "${name}" must declare output { schema, render, presentationMeta? }`)
+```
+
+0.10.0 里有两类声明不满足它：
+
+- `writeOp(...)`（`remote_write` / `remote_mkdir` / `remote_move` / `remote_delete`）
+  把裸 JSON Schema 直接当 `output` 传 —— 既没有 `schema` 包装层，也没有 `render`。
+- `lib/hub/advanced-tools.js` 的 `remote_file` / `remote_screenshot` 只写了
+  `output: { schema: {...} }` —— 缺 `render`。
+
+`remote_write` 是第一个被注册到的，所以报错停在它身上；**任何一个**不合法都会让
+**整个插件条目不激活**。
+
+#### 为什么单测没抓到
+
+测试里的 `ctx.tools.register` 是假实现（`definitions.set(def.name, def)`），只存
+map 不做校验。真实的注册期校验在测试里从未被执行过。
+
+#### 修法
+
+- `lib/hub/tools.js` 新增导出 `withOutputContract(definition)`：把声明补齐成
+  `output: { schema, render }`。三种历史写法都兼容（已带 `render` 的保留、
+  只有 `schema` 的补 `render`、裸 JSON Schema 的包一层），且对
+  `undefined` / `null` / 非对象声明也不抛。
+- 两个注册入口（`registerRemoteTools` 的 `reg`、`registerAdvancedTools` 的 `reg`）
+  统一先过 `withOutputContract`，收口在一处。
+- 新增 `test/output-contract.test.js`（4 条）：**复刻 Host 的真实校验条件**，
+  对两个入口注册出的每一个工具逐一断言，并单测 `withOutputContract` 的三种
+  补齐路径与默认 render 的兜底行为（含循环引用）。
+
+### 测试
+
+```
+tests       1090（1087 pass / 0 fail / 3 skip）
+新增        output-contract 4
+漂移检查    134/134
+```
+
 ## [0.10.0] - 2026-11-02
 
 ### 全面能力升级：自检、双向文件、桌面截图、后台管理

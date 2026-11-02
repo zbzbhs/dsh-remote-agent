@@ -32,7 +32,7 @@ explicitly pull them.
 
 | | |
 |---|---|
-| **Status** | 0.9.0 —— hub + worker end-to-end usable; both `exec` and `agent` paths verified on two real machines; CI covers Windows / macOS / Linux |
+| **Status** | 0.10.1 —— task delegation, real self-check, two-way file transfer, desktop screenshots and background agent management; CI covers Windows / macOS / Linux |
 | **DSH** | Desktop / CLI, verified on 0.2.0-rc.2 |
 | **Platforms** | Windows (fully verified) · Linux / macOS (CI covered) |
 | **Dependencies** | **Zero external npm dependencies** —— `node:` built-ins only |

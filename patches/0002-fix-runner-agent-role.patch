@@ -1,0 +1,12 @@
+diff --git a/lib/node/runner.js b/lib/node/runner.js
+index a5cd93b..cc805a9 100644
+--- a/lib/node/runner.js
++++ b/lib/node/runner.js
+@@ -795,6 +795,7 @@ export class InProcessRunner {
+       // 必须带 plugin source —— 省略 source 会被当成人类输入，这是不能继承的权限。
+       dlog('before followup', { hasFollowup: typeof agent.followup === 'function' })
+       agent.followup({
++        role: 'user',
+         content: [{ type: 'text', text: goal }],
+         source: PLUGIN_SOURCE,
+       })

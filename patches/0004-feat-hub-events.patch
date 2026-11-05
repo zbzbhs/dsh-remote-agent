@@ -1,0 +1,35 @@
+diff --git a/lib/hub/node-registry.js b/lib/hub/node-registry.js
+index 6ecf235..06cac90 100644
+--- a/lib/hub/node-registry.js
++++ b/lib/hub/node-registry.js
+@@ -1064,6 +1064,8 @@ class NodeRegistryCore {
+     rec.lastSeen = Date.now()
+     rec.conn = undefined
+     this.log('info', 'node offline', { nodeId, reason })
++    // Emit nodeOffline so ds-bot worker-bridge can flip bot.worker.online=false immediately.
++    this.emit?.('nodeOffline', { nodeId, reason, lastSeen: rec.lastSeen })
+     // 断连时在途的产物分块必然残缺，直接失败掉，别让临时文件挂着
+     this.pulls?.onNodeOffline?.(nodeId)
+     // 在途的远程文件请求同样 fail-fast（提案 #25）：等不到 fs/res 就别挂调用方
+diff --git a/lib/hub/registry-ingest.js b/lib/hub/registry-ingest.js
+index 893edd4..60e2830 100644
+--- a/lib/hub/registry-ingest.js
++++ b/lib/hub/registry-ingest.js
+@@ -153,6 +153,8 @@ export function withIngest(Base) {
+           t.updatedAt = Date.now()
+           this.log('info', 'task ended', { taskId: t.taskId, nodeId, status: t.status })
+           this.resolveWaiters(t)
++          // Emit taskEnd so ds-bot worker-bridge can wake pollers without tight looping.
++          this.emit?.('taskEnd', { taskId: t.taskId, nodeId, status: t.status, endedAt: t.endedAt })
+           return
+         }
+ 
+@@ -252,6 +254,8 @@ export function withIngest(Base) {
+             }
+             rec.models = cleaned
+           }
++          // Emit nodeResource so worker-bridge can update bot.worker.cpu/mem in real time.
++          this.emit?.('nodeResource', { nodeId, resource: rec.resource, queue: rec.queue ?? null })
+           return
+         }
+ 

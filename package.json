@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-agent",
-  "version": "0.10.1-fork.12",
+  "version": "0.10.1-fork.13",
   "type": "module",
   "description": "把另一台电脑变成你 DSH 的远程 Agent 同事：副机本地持久跑任务、独立 Agent 循环，只回传 handoff 摘要与产物清单，成品按需拉取。",
   "license": "MIT",

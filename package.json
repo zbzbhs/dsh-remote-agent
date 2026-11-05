@@ -1,8 +1,8 @@
 {
   "name": "dsh-remote-agent",
-  "version": "0.10.1-fork.11",
+  "version": "0.10.1-fork.12",
   "type": "module",
-  "description": "把另一台电脑变成你 DSH 的远程 Agent 同事：副机本地持久跑任务、独立 Agent 循环，只回传 handoff 摘要与产物清单，成品按需拉取。",
+  "description": "\u628a\u53e6\u4e00\u53f0\u7535\u8111\u53d8\u6210\u4f60 DSH \u7684\u8fdc\u7a0b Agent \u540c\u4e8b\uff1a\u526f\u673a\u672c\u5730\u6301\u4e45\u8dd1\u4efb\u52a1\u3001\u72ec\u7acb Agent \u5faa\u73af\uff0c\u53ea\u56de\u4f20 handoff \u6458\u8981\u4e0e\u4ea7\u7269\u6e05\u5355\uff0c\u6210\u54c1\u6309\u9700\u62c9\u53d6\u3002",
   "license": "MIT",
   "repository": {
     "type": "git",

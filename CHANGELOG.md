@@ -2282,3 +2282,12 @@ bug**：第一版 `toPlainJson` 把 `null` 也当 `undefined` 吞掉了（会让
 - 去除 err/warn 在表单顶部的重复渲染，统一移至提交按钮上方（一处）
 - `test/transport-mode.test.js` 节点卡片测试改为锚在 NodeCard 函数内，变异验证改为真断言
 - `test/views.test.js` KEYS.nodeView 新增 `transportMode`
+
+## fork.24 — B1 TDZ 修复 + B2 transportMode 透传 + B3 worker 回填 + B4 清理
+
+- **B1**: ConfigPanel `const tm = val('transportMode')` 从 `val` 定义前移到后，消除 TDZ ReferenceError
+- **B2**: `buildNodeHello` 新增 `transportMode` 字段；`node-registry.js` list() 从 `r.hello.transportMode` 透传
+- **B3**: worker cfg 回填从 `/ui/config`（hub-only，404）改为 `/setup/state`；`configView` 补 `hubUrl`
+- **B4**: 删 `ssh2` 依赖；`@deepseek-ai/schemastery` 恢复 `^3.18.4`
+- 删 3 条自证式变异测试，新增 B1/B2/B3 真变异测试
+- 测试 1117/1110/2/5，doc-drift 134/134

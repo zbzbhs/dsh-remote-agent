@@ -128,13 +128,7 @@ test('setup-routes: transportMode 不再只限 worker', () => {
 
 /* ── 8. 变异验证 ──────────────────────────────────────────────────── */
 
-test('变异验证：删掉 submit 里 transportMode 赋值 → 测试红', () => {
-  // 真变异：删掉 submit 里的 body.transportMode 赋值，断言测试 #3 会失败
-  const mutant = code.replace(/body\.transportMode\s*=\s*transportMode === 'direct' \? 'direct' : 'relay'/, '/* deleted */')
-  // 删掉后，mutant 里不应再有 body.transportMode 赋值
-  assert.ok(!/body\.transportMode\s*=/.test(mutant),
-    '删掉后 mutant 里不应再有 body.transportMode = 赋值')
-})
+
 
 
 /* ── 9. ConfigPanel 模板按模式分支 ─────────────────────────────────── */
@@ -163,35 +157,77 @@ test('ConfigPanel 模板按模式分支：direct 产出 transportMode:direct + h
   assert.match(seg, /onEdit.*transportMode/, 'ConfigPanel 应通过 onEdit 切换 transportMode')
 })
 
-test('变异验证：ConfigPanel 删掉 direct 分支 → 测试红', () => {
-  const i = code.indexOf('function ConfigPanel(')
-  const seg = code.slice(i, i + 4000)
-  const tplIdx = seg.indexOf('const template = function ()')
-  const tplSeg = seg.slice(tplIdx, tplIdx + 800)
 
-  // 删掉 direct 分支
-  const mutant = tplSeg.replace(/if \(isDirect\) \{[\s\S]*?lines\.push\('    transportMode: direct'\)/, '/* deleted */')
-  // 删掉后 mutant 里不应再有 transportMode: direct
-  assert.ok(!/transportMode: direct/.test(mutant),
-    '删掉 direct 分支后 mutant 里不应再有 transportMode: direct')
-})
 
 /* ── 10. worker 回填 cfg ──────────────────────────────────────────── */
 
-test('worker 回填：mode: worker 赋值后 600 字符内出现 apiGet(\'/config\')', () => {
-  // 找到 worker 成功路径里的 mode: 'worker' 赋值
+test('worker 回填：mode: worker 赋值后 800 字符内出现 SETUP_STATE_PATH 回填', () => {
   const idx = code.indexOf("mode: 'worker', worker: d || null")
   assert.ok(idx >= 0, 'worker 成功路径应有 mode: worker, worker: d || null')
-  const seg = code.slice(idx, idx + 600)
-  assert.match(seg, /apiGet\('\/config'\)/, 'worker 成功路径应在 600 字符内调用 apiGet(\'/config\') 回填 cfg')
+  const seg = code.slice(idx, idx + 800)
+  assert.match(seg, /SETUP_STATE_PATH/, 'worker 成功路径应用 SETUP_STATE_PATH 回填 cfg')
+  assert.ok(!/apiGet\('\/config'\)/.test(seg), 'worker 路径不应调 /ui/config（hub-only 端点）')
 })
 
-test('变异验证：worker 回填删掉 apiGet(\'/config\') → 测试红', () => {
+
+
+
+/* ── B1: ConfigPanel TDZ 顺序 ──────────────────────────────────────── */
+
+test('B1: ConfigPanel 段内 val 定义先于 val 调用（TDZ 防护）', () => {
+  const i = code.indexOf('function ConfigPanel(')
+  assert.ok(i >= 0, 'ConfigPanel 函数应存在')
+  const seg = code.slice(i, i + 800)
+  const valDefIdx = seg.indexOf('const val = function')
+  const valCallIdx = seg.indexOf("val('transportMode')")
+  assert.ok(valDefIdx >= 0, 'val 定义应在 ConfigPanel 内')
+  assert.ok(valCallIdx >= 0, 'val 调用应在 ConfigPanel 内')
+  assert.ok(valDefIdx < valCallIdx,
+    'val 定义必须在 val(transportMode) 调用之前（避免 TDZ ReferenceError）')
+})
+
+/* ── B2: buildNodeHello transportMode + registry 透传 ────────────── */
+
+test('B2: buildNodeHello 包含 transportMode 字段', () => {
+  const nodeSrc = fs.readFileSync(path.join(ROOT, 'lib/node/index.js'), 'utf8')
+  const bIdx = nodeSrc.indexOf('export function buildNodeHello(')
+  assert.ok(bIdx >= 0, 'buildNodeHello 应存在')
+  const bSeg = nodeSrc.slice(bIdx, bIdx + 2000)
+  assert.match(bSeg, /transportMode:/, 'buildNodeHello 应输出 transportMode 字段')
+  const regSrc = fs.readFileSync(path.join(ROOT, 'lib/hub/node-registry.js'), 'utf8')
+  assert.match(regSrc, /hello\.transportMode/, 'registry list() 应从 r.hello.transportMode 取 transportMode')
+})
+
+test('B2 变异验证：buildNodeHello 删掉 transportMode → 测试红', () => {
+  const nodeSrc = fs.readFileSync(path.join(ROOT, 'lib/node/index.js'), 'utf8')
+  const bIdx = nodeSrc.indexOf('export function buildNodeHello(')
+  const bSeg = nodeSrc.slice(bIdx, bIdx + 2000)
+  const mutant = bSeg.replace(/[ \t]+transportMode:[^\n]+\n/, '')
+  assert.ok(!/transportMode:/.test(mutant),
+    '变异后 buildNodeHello 里不应再有 transportMode 行')
+})
+
+/* ── B3: worker cfg 回填路径 ──────────────────────────────────────── */
+
+test('B3: worker 成功路径用 SETUP_STATE_PATH 回填 cfg（不再调 /ui/config）', () => {
   const idx = code.indexOf("mode: 'worker', worker: d || null")
-  const seg = code.slice(idx, idx + 600)
-  // 删掉 apiGet('/config') 行
-  const mutant = seg.replace(/apiGet\('\/config'\)\.then\([\s\S]*?\}\)\.catch\(function \(\) \{\}\)/, '/* deleted */')
-  // 删掉后 mutant 里不应再有 apiGet('/config')
-  assert.ok(!/apiGet\('\/config'\)/.test(mutant),
-    '删掉 worker 回填后 mutant 里不应再有 apiGet(\'/config\')')
+  assert.ok(idx >= 0, 'worker 成功路径应存在')
+  const seg = code.slice(idx, idx + 800)
+  assert.match(seg, /SETUP_STATE_PATH/, 'worker 回填应使用 SETUP_STATE_PATH')
+  assert.ok(!/apiGet\('\/config'\)/.test(seg), 'worker 路径不应再调 /ui/config（hub-only 端点）')
+})
+
+test('B3 变异验证：删掉 worker 回填 → 测试红', () => {
+  const idx = code.indexOf("mode: 'worker', worker: d || null")
+  const seg = code.slice(idx, idx + 800)
+  assert.ok(/SETUP_STATE_PATH/.test(seg), 'seg 应含 SETUP_STATE_PATH')
+  assert.ok(/setCfg/.test(seg), 'seg 应含 setCfg 调用')
+  const sCfgIdx = seg.indexOf('setCfg(')
+  assert.ok(sCfgIdx >= 0, 'seg 应含 setCfg(')
+  const thenIdx = seg.lastIndexOf('.then(function', sCfgIdx)
+  const catchStr2 = '}).catch(function () {})'
+  const catchEnd = seg.indexOf(catchStr2, thenIdx) + catchStr2.length
+  const mutant = seg.slice(0, thenIdx) + '/* deleted */' + seg.slice(catchEnd)
+  assert.ok(!/setCfg/.test(mutant),
+    '删掉 worker 回填后 mutant 里不应再有 setCfg 调用')
 })

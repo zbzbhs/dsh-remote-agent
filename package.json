@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-agent",
-  "version": "0.10.1-fork.23",
+  "version": "0.10.1-fork.24",
   "type": "module",
   "description": "把另一台电脑变成你 DSH 的远程 Agent 同事：副机本地持久跑任务、独立 Agent 循环，只回传 handoff 摘要与产物清单，成品按需拉取。",
   "license": "MIT",
@@ -73,7 +73,7 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "*"
+    "@deepseek-ai/schemastery": "^3.18.4"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/schemastery": {
@@ -81,8 +81,7 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "*",
-    "ssh2": "1.17.0"
+    "@deepseek-ai/schemastery": "*"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

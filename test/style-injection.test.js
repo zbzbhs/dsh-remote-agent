@@ -26,7 +26,6 @@ test('StyleTag 必须渲染 h(\'style\',...) 元素（不得返回 null）', () 
   assert.ok(i >= 0, '应有 StyleTag 函数')
   const seg = code.slice(i, i + 300)
   assert.match(seg, /h\('style'/, 'StyleTag 必须渲染 <style> 元素——static bundle 里 ctx.get("styles") 为 undefined，只靠 styles.insert CSS 永远不进 DOM')
-  assert.does_not_match = undefined  // compatibility shim
   // 确保没有 return null
   assert.ok(!/return null/.test(seg), 'StyleTag 不得 return null（会导致无样式）')
 })
@@ -47,4 +46,46 @@ test('StyleTag 被挂入每个顶层视图（switchRole / worker / setup / hub�
 
 test('apply 里保留 styles.insert（动态 lane 兼容）', () => {
   assert.match(CLIENT_SRC, /stylesSvc\.insert\(CSS\)/, 'apply 里应保留 styles.insert(CSS)（动态 lane 仍用此路径）')
+})
+
+// ── fork.20 追加测试 ─────────────────────────────────────────────────
+
+test('Root 包装组件存在且接受 theme prop', () => {
+  const code = CLIENT_SRC
+  // function Root 必须存在
+  assert.match(code, /function Root\(/, 'Root 包装组件必须存在')
+  // Root 必须使用 dra-light 来自 props.theme
+  assert.match(code, /theme.*dra-light|dra-light.*theme/, 'Root 必须根据 theme prop 挂 .dra-light')
+})
+
+test('四个顶层视图全部使用 Root 包装（≥4 处 h(Root, { theme）', () => {
+  const code = CLIENT_SRC
+  const matches = (code.match(/h\(Root,\s*\{[^}]*theme/g) || []).length
+  assert.ok(matches >= 4, `h(Root, { theme... }) 应出现至少 4 次（当前 ${matches} 次）`)
+})
+
+test('localStorage dra-theme 读与写都存在', () => {
+  assert.match(CLIENT_SRC, /localStorage\.getItem\(['"']dra-theme['"']\)/, 'localStorage.getItem(dra-theme) 必须存在')
+  assert.match(CLIENT_SRC, /localStorage\.setItem\(['"']dra-theme['"']/, 'localStorage.setItem(dra-theme, ...) 必须存在')
+})
+
+test('CSS token 区之外不出现裸 #05070d 或 rgba(5,7,13', () => {
+  // token 定义行允许 #05070d，其余组件规则不应硬编码深色背景
+  // 简单断言：裸 #05070d 只出现在 token 定义里（--dra-s0:#05070d），不能在任何选择器规则内
+  const lines = CLIENT_SRC.split('\n')
+  const bad = lines.filter(l => {
+    if (/--dra-s0:/.test(l)) return false  // token 定义行允许
+    return /#05070d/.test(l) || /rgba\(5,7,13/.test(l)
+  })
+  assert.ok(bad.length === 0, '组件 CSS 规则里不应有裸 #05070d 或 rgba(5,7,13（当前违规行数：' + bad.length + '）:\n' + bad.slice(0,3).join('\n'))
+})
+
+test('.dra-light 覆盖 accent 等关键 token（浅色模式可用）', () => {
+  // .dra-light 应包含 --dra-accent 和 --dra-line2 的浅色值
+  const lightIdx = CLIENT_SRC.indexOf('.dra-light{')
+  assert.ok(lightIdx >= 0, '.dra-light 规则必须存在')
+  const seg = CLIENT_SRC.slice(lightIdx, lightIdx + 600)
+  assert.match(seg, /--dra-accent/, '.dra-light 必须覆盖 --dra-accent')
+  assert.match(seg, /--dra-line2/, '.dra-light 必须覆盖 --dra-line2')
+  assert.match(seg, /--dra-ok/, '.dra-light 必须覆盖 --dra-ok')
 })

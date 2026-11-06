@@ -124,8 +124,11 @@ function workerRenderBranch(code) {
   if (cards < 0) return ''
   const i = code.lastIndexOf("if (state.mode === 'worker')", cards)
   if (i < 0) return ''
-  // 到下一个 return h('div', { className: 'dra-root' } 之前
-  const end = code.indexOf("return h('div', { className: 'dra-root' }", cards)
+  // 到下一个顶层视图根节点之前：支持旧的 h('div', className:'dra-root') 和新的 h(Root,
+  const endOld = code.indexOf("return h('div', { className: 'dra-root' }", cards)
+  const endNew = code.indexOf("return h(Root, { theme: theme }", cards)
+  const candidates = [endOld, endNew].filter(function (x) { return x > i })
+  const end = candidates.length > 0 ? Math.min.apply(null, candidates) : -1
   return end > i ? code.slice(i, end) : code.slice(i, i + 8000)
 }
 

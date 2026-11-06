@@ -2261,3 +2261,14 @@ bug**：第一版 `toPlainJson` 把 `null` 也当 `undefined` 吞掉了（会让
   本文件顶部用 `### 破坏性变更` 标注。
 - 协议版本号在 `lib/protocol.js` 的 `PROTOCOL_VERSION`。**主副机版本不一致时
   以协议版本号为准**，不要求包版本一致。
+## fork.22 — 传输模式选择（中继 / 直连）
+
+- SetupView 副机配置和主机配置均新增「连接方式」二选一卡片：中继（relay）/ 直连（direct），默认 relay
+- relay 模式：显示 relayUrl 输入；direct 模式：显示 hubUrl 输入，提示「副机主动连主机，主机端口需可达；主机在 NAT 后请用中继」
+- submit() 提交体始终带 transportMode；direct 时发 hubUrl 不发 relayUrl；relay 时发 relayUrl（hub 也发，relay-enroll 用）
+- parsePair() 保留 transportMode，自动推断 direct（有 hubUrl 无 relayUrl）
+- applyPair() 粘贴配对码后自动切换连接方式，提示含中文「直连/中继」
+- 节点卡片 transportMode 显示中文「在线（直连/中继）」而非英文 relay/direct
+- setup-routes.js 放开 hub：两种 role 都按 body.transportMode 落值
+- 副机/主机表单在按钮上方重复渲染 err/warn，确保提示可见
+- 新增 test/transport-mode.test.js（12 条测试），含变异验证

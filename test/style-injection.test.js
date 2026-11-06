@@ -64,9 +64,31 @@ test('四个顶层视图全部使用 Root 包装（≥4 处 h(Root, { theme）',
   assert.ok(matches >= 4, `h(Root, { theme... }) 应出现至少 4 次（当前 ${matches} 次）`)
 })
 
-test('localStorage dra-theme 读与写都存在', () => {
+test('每个视图的 onToggleTheme 都持久化到 localStorage', () => {
+  // getItem 存在性
   assert.match(CLIENT_SRC, /localStorage\.getItem\(['"']dra-theme['"']\)/, 'localStorage.getItem(dra-theme) 必须存在')
-  assert.match(CLIENT_SRC, /localStorage\.setItem\(['"']dra-theme['"']/, 'localStorage.setItem(dra-theme, ...) 必须存在')
+
+  // 收集每个 onToggleTheme: 出现位置，断言其后 300 字符内有 localStorage.setItem('dra-theme'
+  const code = CLIENT_SRC
+  const re = /onToggleTheme:\s*function\s*\(/g
+  let m
+  let toggleCount = 0
+  let failures = []
+  while ((m = re.exec(code)) !== null) {
+    toggleCount++
+    const seg = code.slice(m.index, m.index + 300)
+    if (!/localStorage\.setItem\(['"']dra-theme['"']/.test(seg)) {
+      failures.push(toggleCount)
+    }
+  }
+  assert.ok(toggleCount >= 3, `至少 3 处 onToggleTheme（当前 ${toggleCount}）`)
+  assert.ok(failures.length === 0,
+    `每个 onToggleTheme 后 300 字符内都必须有 localStorage.setItem('dra-theme')（第 ${failures.join(', ')} 处缺失）`)
+
+  // setItem 总数应与 toggle 总数一致
+  const setItemMatches = (code.match(/localStorage\.setItem\(['"']dra-theme['"']/g) || []).length
+  assert.ok(setItemMatches === toggleCount,
+    `setItem(${setItemMatches}) 应与 onToggleTheme(${toggleCount}) 数量一致——否则某视图忘了持久化`)
 })
 
 test('CSS token 区之外不出现裸 #05070d 或 rgba(5,7,13', () => {

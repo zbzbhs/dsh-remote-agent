@@ -102,11 +102,13 @@ test('applyPair 设置 transportMode 并更新提示', () => {
 /* ── 6. 中文化显示 ────────────────────────────────────────────────── */
 
 test('节点卡片 transportMode 显示中文（中继/直连）', () => {
-  const display = code.match(/w\.transportMode.*直连.*中继|直连.*中继.*w\.transportMode/)
-  assert.ok(display, 'transportMode 显示应含中文「直连/中继」，不应只显示英文 relay/direct')
-  // 不应再出现裸的 'relay' 作为显示值
-  const oldDisplay = code.match(/w\.transportMode \|\| 'relay'/)
-  assert.ok(!oldDisplay, '不应再回退显示英文 relay')
+  // 锚到 NodeCard 徽标行，不是 Worker 视图信息行
+  const ncIdx = code.indexOf('function NodeCard(')
+  assert.ok(ncIdx >= 0, 'NodeCard 函数应存在')
+  const ncSeg = code.slice(ncIdx, ncIdx + 800)
+  // 徽标应含 transportMode 中文显示
+  assert.match(ncSeg, /n\.transportMode === 'direct' \? '直连' : '中继'/,
+    'NodeCard 徽标应按 transportMode 显示中文「直连/中继」')
 })
 
 /* ── 7. setup-routes 放开 hub ──────────────────────────────────────── */
@@ -127,8 +129,69 @@ test('setup-routes: transportMode 不再只限 worker', () => {
 /* ── 8. 变异验证 ──────────────────────────────────────────────────── */
 
 test('变异验证：删掉 submit 里 transportMode 赋值 → 测试红', () => {
-  // 模拟删除：在 code 里把 body.transportMode = ... 替换掉，然后检查前面的断言会失败
+  // 真变异：删掉 submit 里的 body.transportMode 赋值，断言测试 #3 会失败
   const mutant = code.replace(/body\.transportMode\s*=\s*transportMode === 'direct' \? 'direct' : 'relay'/, '/* deleted */')
-  assert.ok(!/body\.transportMode\s*=/.test(mutant.replace('/* deleted */', '')),
-    '删除后 body.transportMode 赋值不应存在')
+  // 删掉后，mutant 里不应再有 body.transportMode 赋值
+  assert.ok(!/body\.transportMode\s*=/.test(mutant),
+    '删掉后 mutant 里不应再有 body.transportMode = 赋值')
+})
+
+
+/* ── 9. ConfigPanel 模板按模式分支 ─────────────────────────────────── */
+
+test('ConfigPanel 模板按模式分支：direct 产出 transportMode:direct + hubUrl，relay 产出 transportMode:relay + relayUrl', () => {
+  const i = code.indexOf('function ConfigPanel(')
+  assert.ok(i >= 0, 'ConfigPanel 函数应存在')
+  const seg = code.slice(i, i + 4000)
+
+  // template 函数内：isDirect 分支产出 transportMode: direct + hubUrl
+  const tplIdx = seg.indexOf('const template = function ()')
+  assert.ok(tplIdx >= 0, 'template 函数应存在')
+  const tplSeg = seg.slice(tplIdx, tplIdx + 800)
+
+  assert.match(tplSeg, /transportMode: direct/, 'direct 分支应输出 transportMode: direct')
+  assert.match(tplSeg, /hubUrl:/, 'direct 分支应输出 hubUrl:')
+
+  assert.match(tplSeg, /transportMode: relay/, 'relay 分支应输出 transportMode: relay')
+  assert.match(tplSeg, /relayUrl:/, 'relay 分支应输出 relayUrl:')
+
+  // 模式卡片：两张卡片（用 !isDirect/isDirect 控制 active 类）
+  assert.match(seg, /dra-mode-card.*!isDirect \? ' active'/, '应有 relay 模式卡片（!isDirect 为 active）')
+  assert.match(seg, /dra-mode-card.*isDirect \? ' active'/, '应有 direct 模式卡片（isDirect 为 active）')
+
+  // ConfigPanel 应有 transportMode 切换
+  assert.match(seg, /onEdit.*transportMode/, 'ConfigPanel 应通过 onEdit 切换 transportMode')
+})
+
+test('变异验证：ConfigPanel 删掉 direct 分支 → 测试红', () => {
+  const i = code.indexOf('function ConfigPanel(')
+  const seg = code.slice(i, i + 4000)
+  const tplIdx = seg.indexOf('const template = function ()')
+  const tplSeg = seg.slice(tplIdx, tplIdx + 800)
+
+  // 删掉 direct 分支
+  const mutant = tplSeg.replace(/if \(isDirect\) \{[\s\S]*?lines\.push\('    transportMode: direct'\)/, '/* deleted */')
+  // 删掉后 mutant 里不应再有 transportMode: direct
+  assert.ok(!/transportMode: direct/.test(mutant),
+    '删掉 direct 分支后 mutant 里不应再有 transportMode: direct')
+})
+
+/* ── 10. worker 回填 cfg ──────────────────────────────────────────── */
+
+test('worker 回填：mode: worker 赋值后 600 字符内出现 apiGet(\'/config\')', () => {
+  // 找到 worker 成功路径里的 mode: 'worker' 赋值
+  const idx = code.indexOf("mode: 'worker', worker: d || null")
+  assert.ok(idx >= 0, 'worker 成功路径应有 mode: worker, worker: d || null')
+  const seg = code.slice(idx, idx + 600)
+  assert.match(seg, /apiGet\('\/config'\)/, 'worker 成功路径应在 600 字符内调用 apiGet(\'/config\') 回填 cfg')
+})
+
+test('变异验证：worker 回填删掉 apiGet(\'/config\') → 测试红', () => {
+  const idx = code.indexOf("mode: 'worker', worker: d || null")
+  const seg = code.slice(idx, idx + 600)
+  // 删掉 apiGet('/config') 行
+  const mutant = seg.replace(/apiGet\('\/config'\)\.then\([\s\S]*?\}\)\.catch\(function \(\) \{\}\)/, '/* deleted */')
+  // 删掉后 mutant 里不应再有 apiGet('/config')
+  assert.ok(!/apiGet\('\/config'\)/.test(mutant),
+    '删掉 worker 回填后 mutant 里不应再有 apiGet(\'/config\')')
 })

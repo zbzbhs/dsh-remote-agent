@@ -2272,3 +2272,13 @@ bug**：第一版 `toPlainJson` 把 `null` 也当 `undefined` 吞掉了（会让
 - setup-routes.js 放开 hub：两种 role 都按 body.transportMode 落值
 - 副机/主机表单在按钮上方重复渲染 err/warn，确保提示可见
 - 新增 test/transport-mode.test.js（12 条测试），含变异验证
+
+## fork.23 — 节点卡片中文化 + ConfigPanel 完整 + 修假测试
+
+- `lib/hub/views.js` nodeView 新增 `transportMode` 投影（副机上报）
+- NodeCard 徽标由「在线」改为「在线（直连）」/「在线（中继）」，锚在 NodeCard 函数内
+- ConfigPanel 新增传输模式切换（中继/直连）、hubUrl 字段、配置模板按模式生成
+- ra18-1 修复：worker 模式成功进入后也调 `apiGet('/config')` 回填 cfg（此前 worker cfg 恒为 null）
+- 去除 err/warn 在表单顶部的重复渲染，统一移至提交按钮上方（一处）
+- `test/transport-mode.test.js` 节点卡片测试改为锚在 NodeCard 函数内，变异验证改为真断言
+- `test/views.test.js` KEYS.nodeView 新增 `transportMode`

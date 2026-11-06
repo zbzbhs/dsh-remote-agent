@@ -56,7 +56,7 @@ const KEYS = {
   nodeView: [
     'nodeId', 'online', 'os', 'arch', 'agentMode', 'roots', 'caps', 'since', 'lastSeen',
     'taskCount', 'repos', 'reposAt', 'resource',
-    'runnerKind', 'defaultModel', 'models',
+    'runnerKind', 'defaultModel', 'models', 'transportMode',
   ].sort(),
   finalItemView: ['path', 'kind', 'bytes', 'sha256'].sort(),
   changedItemView: ['op', 'path', 'bytes', 'deltaBytes'].sort(),

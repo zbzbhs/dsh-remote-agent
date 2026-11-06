@@ -2261,3 +2261,33 @@ bug**：第一版 `toPlainJson` 把 `null` 也当 `undefined` 吞掉了（会让
   本文件顶部用 `### 破坏性变更` 标注。
 - 协议版本号在 `lib/protocol.js` 的 `PROTOCOL_VERSION`。**主副机版本不一致时
   以协议版本号为准**，不要求包版本一致。
+## fork.22 — 传输模式选择（中继 / 直连）
+
+- SetupView 副机配置和主机配置均新增「连接方式」二选一卡片：中继（relay）/ 直连（direct），默认 relay
+- relay 模式：显示 relayUrl 输入；direct 模式：显示 hubUrl 输入，提示「副机主动连主机，主机端口需可达；主机在 NAT 后请用中继」
+- submit() 提交体始终带 transportMode；direct 时发 hubUrl 不发 relayUrl；relay 时发 relayUrl（hub 也发，relay-enroll 用）
+- parsePair() 保留 transportMode，自动推断 direct（有 hubUrl 无 relayUrl）
+- applyPair() 粘贴配对码后自动切换连接方式，提示含中文「直连/中继」
+- 节点卡片 transportMode 显示中文「在线（直连/中继）」而非英文 relay/direct
+- setup-routes.js 放开 hub：两种 role 都按 body.transportMode 落值
+- 副机/主机表单在按钮上方重复渲染 err/warn，确保提示可见
+- 新增 test/transport-mode.test.js（12 条测试），含变异验证
+
+## fork.23 — 节点卡片中文化 + ConfigPanel 完整 + 修假测试
+
+- `lib/hub/views.js` nodeView 新增 `transportMode` 投影（副机上报）
+- NodeCard 徽标由「在线」改为「在线（直连）」/「在线（中继）」，锚在 NodeCard 函数内
+- ConfigPanel 新增传输模式切换（中继/直连）、hubUrl 字段、配置模板按模式生成
+- ra18-1 修复：worker 模式成功进入后也调 `apiGet('/config')` 回填 cfg（此前 worker cfg 恒为 null）
+- 去除 err/warn 在表单顶部的重复渲染，统一移至提交按钮上方（一处）
+- `test/transport-mode.test.js` 节点卡片测试改为锚在 NodeCard 函数内，变异验证改为真断言
+- `test/views.test.js` KEYS.nodeView 新增 `transportMode`
+
+## fork.24 — B1 TDZ 修复 + B2 transportMode 透传 + B3 worker 回填 + B4 清理
+
+- **B1**: ConfigPanel `const tm = val('transportMode')` 从 `val` 定义前移到后，消除 TDZ ReferenceError
+- **B2**: `buildNodeHello` 新增 `transportMode` 字段；`node-registry.js` list() 从 `r.hello.transportMode` 透传
+- **B3**: worker cfg 回填从 `/ui/config`（hub-only，404）改为 `/setup/state`；`configView` 补 `hubUrl`
+- **B4**: 删 `ssh2` 依赖；`@deepseek-ai/schemastery` 恢复 `^3.18.4`
+- 删 3 条自证式变异测试，新增 B1/B2/B3 真变异测试
+- 测试 1117/1110/2/5，doc-drift 134/134
